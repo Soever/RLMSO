@@ -1,4 +1,4 @@
-from ucimlrepo import fetch_ucirepo 
+
 import pandas as pd
 # fetch dataset 
 from sklearn.model_selection import train_test_split
@@ -38,5 +38,5 @@ if __name__ == '__main__':
     # def fobj(x):
     #     return x[0]**2+x[1]**2
     # f =  fobj
-    Xfood,fval,gbest_t = rlmso.optimize(100,1000,-10,10,11,f)
+    Xfood,fval,gbest_t = rlmso.optimize(10,20,-10,10,11,f)
 

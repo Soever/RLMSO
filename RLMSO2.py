@@ -299,22 +299,18 @@ class RLMSO:
         reward = -1 * np.ones(N)  # 初始奖励为 -1
         newX_dec = np.clip(newX_dec, lb, ub)
         X_dec = X.decs
-        t1 = time.time()
+
         def compute_fitness(j, newX_dec, fobj):
             print(j)
-            return fobj(newX_dec[j, :])
-        # fitness_new = Parallel(n_jobs=25)(delayed(compute_fitness)(j, newX_dec, fobj) for j in range(N))
-
+            a = fobj(newX_dec[j, :])
+            return a
+        fitness_new = Parallel(n_jobs=20)(delayed(compute_fitness)(j, newX_dec, fobj) for j in range(N))
+        fitness_new = np.array(fitness_new).reshape(X.objs.shape)
         # for j in range(N):
-        #     # 计算新的适应度
+        #     print(j)
         #     fitness_new[j] = fobj(newX_dec[j, :])
-        with ThreadPoolExecutor() as executor:
-            futures = [executor.submit(compute_fitness, j, newX_dec, fobj) for j in range(N)]
-            for j, future in enumerate(futures):
-                fitness_new[j] = future.result()
-
-        t2 = time.time()
-        print(t2-t1)
+        
+        print(fitness_new)
         # fitness_new = parallel_computation(N, newX_dec, fobj)
         improved_mask = fitness_new < fitness_old
 
@@ -400,8 +396,10 @@ class RLMSO:
         ## Init
         X_dec,lb,ub= self.init_pop(N,lb,ub,dim)
         fitness = np.zeros(N)
-        for i in range(N):
-            fitness[i] = fobj(X_dec[i, :])
+        def compute_fitness(j, newX_dec, fobj):
+            return fobj(newX_dec[j, :])
+        fitness = Parallel(n_jobs=-1)(delayed(compute_fitness)(i, X_dec, fobj) for i in range(N))
+        fitness = np.array(fitness)
         gbest_t = np.zeros(T)
 
         Xm, Xf, Xfood = self.divide_swarm(X_dec, fitness)
@@ -516,15 +514,15 @@ class RLMSO:
             # 评估解并更新
             Xm,  reward_m, failure_times_m = self.evaluation_reward(Xm, newXm_dec, lb, ub, fobj, failure_times_m)
             Xf,  _, failure_times_f = self.evaluation_reward(Xf, newXf_dec,  lb, ub, fobj, failure_times_f)
-
+            print("--------------------------------------------222")
             # 获取下一步的状态
             next_state_m = self.get_state_knn(Xm.decs, Xm.objs, round(N/10))
-
+            print("--------------------------------------------333")
             # 更新 Q 表
             for i in range(Xm.decs.shape[0]):
                 q_table_m = self.update_q_table(state_m[i, :], action_m[i], reward_m[i], next_state_m[i, :], q_table_m)
             Xfood = Xm.bestInd if Xm.bestInd.obj < Xf.bestInd.obj else Xf.bestInd
-
+            print("--------------------------------------------444")
             # 记录全局最优适应度
             gbest_t[ t] = Xfood.obj
             print("Iter:{t} Best:{GYbest}",t,Xfood.obj)
