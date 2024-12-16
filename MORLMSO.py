@@ -5,75 +5,8 @@ from joblib import Parallel, delayed
 import time
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
-
-class individual:
-    def __init__(self,dec = None, obj = None , cst=None):
-        self.dec  = dec # ndim = 1 , shape = (DecDim,)
-        self.obj  = obj  # ndim = 1 , shape = (ObjNum,)
-        # self.fit  = fit
-        self.cst = cst # ndim = 1, shape = (ConsNum,) # con < 0 is feasible, others are flagged as -1 
-        self.cstNum = None
-        self.cstViolationFlag = None # True  violated
-        self.cstViolationNum = None
-        self.feasible = None 
-        self.p=None # 违反程度 取值大于0 越小解越好
-        
-        if self.dec is not None and self.obj is not None:
-            if self.dec.ndim >1:
-                if self.shape[0]== 1:
-                    self.dec = self.dec.flatten()
-                else:
-                    ValueError("Dim Error")
-            if self.cst is not None:
-                self.Cal_Constrain() # 计算约束违反情况
-        else :
-            raise ValueError("Both decision and objective values must be provided.")
-        
-        def Cal_Constrain(self,cstMax):
-            self.cstNum = self.cst.shape[0]
-            # 计算约束违反情况
-            self.cstViolationFlag = np.array([False if self.cst < 0 else True for con in self.cst])
-            self.cstViolationNum = np.sum(self.consFlag == True)
-            self.feasible = True if self.consViolationNum == 0 else False
-            if not self.feasible:
-                if cstMax.shape == self.cst.shape:
-                    self.cst[self.cst > 0] / cstMax
-                    self.p = (1+np.max(self.cst))*(1+self.consViolationNum/self.consNum)
-                else:
-                    raise ValueError("check cstMax shape.")
-
-
-
-
-class Population(individual):
-    def __init__(self,decs=None,objs=None,csts=None):
-        self.decs=decs # ndim = 2, shape = (popSize,decDim)
-        self.objs=objs # ndim = 2, shape = (popSize,objDim)
-        self.csts=csts # ndim = 2, shape = (popSize,cstNum)
-        self.popSize = self.decs.shape[0] # ndim = 0 , scalar
-        self.cstNum = None # ndim = 0, scalar 
-        self.cstViolationFlag = None # ndim = 2, shape = (popSize,cstNum) ,True  violated
-        self.cstViolationNum  = None # ndim = 1, shape = (popSize,)
-        self.feasible=None # ndim = 1, shape = (popSize,)
-
-        self.Cal_Constrain()
-    
-    def Cal_Constrain(self):
-            self.cstNum = self.csts.shape[1]
-            # 计算约束违反情况
-            cstMax = self.csts.max(axis=0)
-            for i in range (self.popSize):
-                self.cstViolationFlag[i] = np.array([False if con < 0 else True for con in self.cst[i]])
-                self.cstViolationNum[i] = np.sum(self.cstViolationFlag[i] == True)
-                self.feasible[i] = True if self.cstViolationNum[i] == 0 else False
-                if not self.feasible[i]:
-                    self.cst[i,self.cst[i] > 0] /= cstMax[self.cst[i] > 0]
-                    self.p = (1+np.max(self.cst))*(1+self.cstViolationNum[i]/self.cstNum[i])
-
-
-
-
-class RLMSO:
+from RLMSO import RLMSO
+class MORLMSO(RLMSO):
     def __init__(self, Threshold=0.25,Thresold2= 0.6,C1=0.5,C2=0.05,C3=2):
         self.Threshold=Threshold
         self.Thresold2=Thresold2
@@ -92,40 +25,29 @@ class RLMSO:
         fitnessBest_m = np.min(fitness_m)
         gbest1 = np.argmin(fitness_m)  # Index of the best male
         Xbest_m = Xm[gbest1, :]
-
         fitnessBest_f = np.min(fitness_f)
         gbest2 = np.argmin(fitness_f)  # Index of the best female
         Xbest_f = Xf[gbest2, :]
         GYbest = np.min(fitness)
         gbest = np.argmin(fitness)  # Index of the global best
-        Xfood = X[gbest, :]
-
+        Xfood = X[gbest,  :]
         return Xm, Xf, fitness_m, fitness_f,Xbest_m,Xbest_f,fitnessBest_m,fitnessBest_f,Xfood,GYbest
-    def init_pop(self,N,lb,ub,dim):
-        # 确保 lb 和 ub 是 numpy 数组
-        lb = np.array(lb, ndmin=1)  # 转换为至少 1D 数组
-        ub = np.array(ub, ndmin=1)  # 转换为至少 1D 数组
-        # 如果 lb 和 ub 是标量，则扩展它们到 dim 的大小
-        if lb.size == 1:
-            lb = np.full((dim,), lb)
-        if ub.size == 1:
-            ub = np.full((dim,), ub)
-        X = lb + np.random.rand(N, dim) * (ub - lb)  # eq.(1)
-        return X,lb,ub
     
-    def ind_exploration_NoFood(self,X_dec, fitness, X_decs,fitnesses, C2, lb, ub):
+    def ind_exploration_NoFood(self,X_dec, fitness, ind_fitness, C2, lb, ub):
         vec_flag = np.array([1, -1])  # Equivalent to MATLAB's [1, -1]
-        N,dim = X_decs.shape
+        N, dim = X_dec.shape
         newX_dec = np.zeros(dim)  # 1D array for new decision variables
+
         for j in range(dim):
             rand_leader_index = int(N * np.random.rand())  # Random index in range [0, N-1]
-            X_rand = X_decs[rand_leader_index, :]
+            X_rand = X_dec[rand_leader_index, :]
             flag_index = int(2 * np.random.rand())  # Random index in range [0, 1]
             Flag = vec_flag[flag_index]
-            A = np.exp(-fitnesses[rand_leader_index] / (fitness + np.finfo(float).eps))  # Avoid division by zero
+            A = np.exp(-fitness[rand_leader_index] / (ind_fitness + np.finfo(float).eps))  # Avoid division by zero
             newX_dec[j] = X_rand[j] + Flag * C2 * A * ((ub[j] - lb[j]) * np.random.rand() + lb[j])
-
+    
         return newX_dec
+    import numpy as np
 
     def exploration_NoFood(self,X_dec, fitness, C2, lb, ub):
         vec_flag = np.array([1, -1])  # Equivalent to MATLAB's [1, -1]
@@ -185,21 +107,6 @@ class RLMSO:
         return newXm_dec, newXf_dec
     
     import numpy as np
-
-    def cal_diversity(self,X_dec):
-        N, dim = X_dec.shape
-        d_pop = 0
-        diversity = np.zeros(N)
-        x_mean = np.mean(X_dec, axis=0)  # Mean across individuals
-
-        for i in range(N):
-            d_ind = 0
-            for j in range(dim):
-                d_ind += (X_dec[i, j] - x_mean[j]) ** 2
-            d_pop += d_ind
-            diversity[i] = np.sqrt(d_pop)
-
-        return diversity
 
 
     def get_neighbor_diversity(self,X, k):
@@ -378,15 +285,6 @@ class RLMSO:
         
         return binary_X
 
-    def evaluate(self,X_dec, fobj,):
-        N = X_dec.shape[0]
-        fitness = np.zeros(N)
-        for i in range(N):
-            fitness[i] = fobj(X_dec[i, :])
-
-        return fitness
-
-
     def optimize(self,N,T,lb,ub,dim,fobj):
         Threshold = self.Threshold
         Threshold2 = self.Thresold2
@@ -395,13 +293,13 @@ class RLMSO:
         C3 = self.C3 * np.ones(T)
         t1 = np.ones(T)
         ## Init
-        X_dec,lb,ub= self.init_pop(N,lb,ub,dim)
+        X,lb,ub= self.init_pop(N,lb,ub,dim)
         fitness = np.zeros(N)
         for i in range(N):
-            fitness[i] = fobj(X_dec[i, :])
+            fitness[i] = fobj(X[i, :])
         gbest_t = np.zeros(T)
         
-        Xm, Xf, fitness_m, fitness_f,Xbest_m,Xbest_f,fitnessBest_m,fitnessBest_f,Xfood,GYbest = self.divide_swarm(X_dec, fitness)
+        Xm, Xf, fitness_m, fitness_f,Xbest_m,Xbest_f,fitnessBest_m,fitnessBest_f,Xfood,GYbest = self.divide_swarm(X, fitness)
         q_table_m = self.init_Q_parameter()
         
 
@@ -489,7 +387,7 @@ class RLMSO:
 
             for i in range(Xm.shape[0]):
                 if action_m[i] == 1:
-                    newXm_dec[i, :] = self.ind_exploration_NoFood(Xm, fitness_m[i], Xm,fitness_m, C2[t - 1], lb, ub)
+                    newXm_dec[i, :] = self.ind_exploration_NoFood(Xm, fitness_m, fitness_m[i], C2[t - 1], lb, ub)
                 elif action_m[i] == 2:
                     newXm_dec[i, :] = self.exploit_Food(Xm[i, :].reshape(1, -1), Xfood, Temp, C3[t - 1])
                 elif action_m[i] == 3:

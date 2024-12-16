@@ -6,71 +6,83 @@ import time
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 
-class individual:
-    def __init__(self,dec = None, obj = None , cst=None):
-        self.dec  = dec # ndim = 1 , shape = (DecDim,)
-        self.obj  = obj  # ndim = 1 , shape = (ObjNum,)
-        # self.fit  = fit
-        self.cst = cst # ndim = 1, shape = (ConsNum,) # con < 0 is feasible, others are flagged as -1 
-        self.cstNum = None
-        self.cstViolationFlag = None # True  violated
-        self.cstViolationNum = None
-        self.feasible = None 
-        self.p=None # 违反程度 取值大于0 越小解越好
-        
-        if self.dec is not None and self.obj is not None:
-            if self.dec.ndim >1:
-                if self.shape[0]== 1:
-                    self.dec = self.dec.flatten()
-                else:
-                    ValueError("Dim Error")
-            if self.cst is not None:
-                self.Cal_Constrain() # 计算约束违反情况
-        else :
-            raise ValueError("Both decision and objective values must be provided.")
-        
-        def Cal_Constrain(self,cstMax):
-            self.cstNum = self.cst.shape[0]
-            # 计算约束违反情况
-            self.cstViolationFlag = np.array([False if self.cst < 0 else True for con in self.cst])
-            self.cstViolationNum = np.sum(self.consFlag == True)
-            self.feasible = True if self.consViolationNum == 0 else False
-            if not self.feasible:
-                if cstMax.shape == self.cst.shape:
-                    self.cst[self.cst > 0] / cstMax
-                    self.p = (1+np.max(self.cst))*(1+self.consViolationNum/self.consNum)
-                else:
-                    raise ValueError("check cstMax shape.")
+class Individual:
+    def __init__(self, pop, idx):
+        self.pop = pop  # 引用 Population 对象
+        self.idx = idx  # 个体索引
+
+    @property
+    def dec(self):
+        # 动态获取 Population 的 decs 数组中的对应行
+        return self.pop.decs[self.idx]
+
+    @dec.setter
+    def dec(self, value):
+        # 动态设置 Population 的 decs 数组中的对应行
+        self.pop.decs[self.idx] = value
+
+    @property
+    def obj(self):
+        return self.pop.objs[self.idx]
+
+    @obj.setter
+    def obj(self, value):
+        self.pop.objs[self.idx] = value
+
+    @property
+    def cst(self):
+        return self.pop.csts[self.idx]
+
+    @cst.setter
+    def cst(self, value):
+        self.pop.csts[self.idx] = value
 
 
-
-
-class Population(individual):
-    def __init__(self,decs=None,objs=None,csts=None):
+class Population:
+    def __init__(self,decs=None,objs=None,csts=None,lb=None,ub = None):
+        self.lb = lb
+        self.ub = ub
         self.decs=decs # ndim = 2, shape = (popSize,decDim)
-        self.objs=objs # ndim = 2, shape = (popSize,objDim)
+        self.objs=objs.reshape(self.decs.shape[0],) if objs.ndim==1 else objs# ndim = 2, shape = (popSize,objDim)
         self.csts=csts # ndim = 2, shape = (popSize,cstNum)
-        self.popSize = self.decs.shape[0] # ndim = 0 , scalar
+        self.inds = [Individual(self,idx=i) for i in range(self.decs.shape[0])]
+
         self.cstNum = None # ndim = 0, scalar 
         self.cstViolationFlag = None # ndim = 2, shape = (popSize,cstNum) ,True  violated
         self.cstViolationNum  = None # ndim = 1, shape = (popSize,)
-        self.feasible=None # ndim = 1, shape = (popSize,)
+        if csts is not None:
+            self.Cal_Constrain()
+        else:
+            self.feasible = [True]*self.decs.shape[0]
 
-        self.Cal_Constrain()
-    
+    def __getitem__(self, idx):
+        return self.inds[idx]
+    # def addInd(self,dec,obj,cst=None):
+    #     self.inds.append(ind)
+    #     self.decs = np.vstack((self.decs,dec))
+    #     self.objs = np.append(self.objs,obj)
+    #     self.csts = np.vstack((self.csts,cst))
+    #     self.feasible = np.append(self.feasible,ind.feasible)
     def Cal_Constrain(self):
             self.cstNum = self.csts.shape[1]
             # 计算约束违反情况
             cstMax = self.csts.max(axis=0)
-            for i in range (self.popSize):
-                self.cstViolationFlag[i] = np.array([False if con < 0 else True for con in self.cst[i]])
+            self.cstViolationFlag = np.zeros_like(self.csts)
+            self.cstViolationNum = np.zeros(self.csts.shape[0])
+            self.feasible= np.zeros(self.csts.shape[0])
+            for i in range (self.csts.shape[0]):
+                self.cstViolationFlag[i,:] = np.array([False if con < 0 else True for con in self.csts[i]])
                 self.cstViolationNum[i] = np.sum(self.cstViolationFlag[i] == True)
                 self.feasible[i] = True if self.cstViolationNum[i] == 0 else False
                 if not self.feasible[i]:
-                    self.cst[i,self.cst[i] > 0] /= cstMax[self.cst[i] > 0]
-                    self.p = (1+np.max(self.cst))*(1+self.cstViolationNum[i]/self.cstNum[i])
-
-
+                    self.csts[i,self.csts[i] > 0] /= cstMax[self.csts[i] > 0]
+                    self.p = (1+np.max(self.csts[i]))*(1+self.cstViolationNum[i]/self.cstNum)
+    @property
+    def popSize(self):
+        return len(self.inds)
+    @property
+    def bestInd(self):
+        return self.inds[np.argmin(self.objs[self.feasible])]
 
 
 class RLMSO:
@@ -82,25 +94,16 @@ class RLMSO:
         self.C3=C3
         self.Nm =None
         self.Nf =None
-    def divide_swarm(self, X, fitness):
-        self.Nm = round(len(X) / 2)  # eq.(2&3)
-        self.Nf = len(X) - self.Nm
-        Xm = X[:self.Nm, :]
-        Xf = X[self.Nm:, :]
-        fitness_m = fitness[:self.Nm]
-        fitness_f = fitness[self.Nm:]
-        fitnessBest_m = np.min(fitness_m)
-        gbest1 = np.argmin(fitness_m)  # Index of the best male
-        Xbest_m = Xm[gbest1, :]
-
-        fitnessBest_f = np.min(fitness_f)
-        gbest2 = np.argmin(fitness_f)  # Index of the best female
-        Xbest_f = Xf[gbest2, :]
-        GYbest = np.min(fitness)
-        gbest = np.argmin(fitness)  # Index of the global best
-        Xfood = X[gbest, :]
-
-        return Xm, Xf, fitness_m, fitness_f,Xbest_m,Xbest_f,fitnessBest_m,fitnessBest_f,Xfood,GYbest
+    def divide_swarm(self, X_dec, fitness,csts=None):
+        self.Nm = round(len(X_dec) / 2)  # eq.(2&3)
+        self.Nf = len(X_dec) - self.Nm
+        Xm = Population(decs=X_dec[:self.Nm, :], objs=fitness[:self.Nm],
+                        csts=self.csts[:self.Nm] if csts is not None else None)
+        Xf = Population(decs=X_dec[self.Nm:, :], objs=fitness[self.Nm:],
+                        csts=self.csts[self.Nm:] if csts is not None else None)
+        Xfood = Xm.bestInd if Xm.bestInd.obj < Xf.bestInd.obj else Xf.bestInd
+        return Xm, Xf, Xfood
+    
     def init_pop(self,N,lb,ub,dim):
         # 确保 lb 和 ub 是 numpy 数组
         lb = np.array(lb, ndmin=1)  # 转换为至少 1D 数组
@@ -126,6 +129,7 @@ class RLMSO:
             newX_dec[j] = X_rand[j] + Flag * C2 * A * ((ub[j] - lb[j]) * np.random.rand() + lb[j])
 
         return newX_dec
+  
 
     def exploration_NoFood(self,X_dec, fitness, C2, lb, ub):
         vec_flag = np.array([1, -1])  # Equivalent to MATLAB's [1, -1]
@@ -288,13 +292,13 @@ class RLMSO:
 
         return action
 
-    def evaluation_reward(self,X, newX_dec, fitness, lb, ub, fobj, failure_times):
-        N = X.shape[0]  # 获取个体数量
-        fitness_new = np.zeros(fitness.shape)  # 新的适应度
-        fitness_old = fitness.copy()  # 旧的适应度
+    def evaluation_reward(self,X, newX_dec, lb, ub, fobj, failure_times):
+        N = X.decs.shape[0]  # 获取个体数量
+        fitness_new = np.zeros(X.objs.shape)  # 新的适应度
+        fitness_old = X.objs  # 旧的适应度
         reward = -1 * np.ones(N)  # 初始奖励为 -1
         newX_dec = np.clip(newX_dec, lb, ub)
-        
+        X_dec = X.decs
         t1 = time.time()
         def compute_fitness(j, newX_dec, fobj):
             print(j)
@@ -312,20 +316,19 @@ class RLMSO:
         t2 = time.time()
         print(t2-t1)
         # fitness_new = parallel_computation(N, newX_dec, fobj)
-        for j in range(N):
-            # 计算新的适应度
-            # fitness_new[j] = fobj(newX_dec[j, :])
-            
-            # 选择优解
-            if fitness_new[j] < fitness[j]:
-                X[j, :] = newX_dec[j, :]
-                fitness[j] = fitness_new[j]
-                reward[j] = 1  # 适应度提高，奖励为 1
-                failure_times[j] = 0  # 重置失败次数
-            else:
-                failure_times[j] += 1  # 适应度未提高，失败次数加 1
+        improved_mask = fitness_new < fitness_old
 
-        return X, fitness, reward, failure_times
+        # 更新 X_dec 中适应度提高的行
+        X_dec[improved_mask, :] = newX_dec[improved_mask, :]
+        fitness_old[improved_mask] = fitness_new[improved_mask]
+        reward[improved_mask] = 1
+
+        # 更新 failure_times，对于未提高的增加 1
+        failure_times[improved_mask] = 0
+        failure_times[~improved_mask] += 1
+
+        newX = Population(decs=X_dec, objs=fitness_old)
+        return newX, reward, failure_times
     def init_Q_parameter(self):
         RF_num = 5
         RD_num = 5
@@ -400,18 +403,15 @@ class RLMSO:
         for i in range(N):
             fitness[i] = fobj(X_dec[i, :])
         gbest_t = np.zeros(T)
-        
-        Xm, Xf, fitness_m, fitness_f,Xbest_m,Xbest_f,fitnessBest_m,fitnessBest_f,Xfood,GYbest = self.divide_swarm(X_dec, fitness)
+
+        Xm, Xf, Xfood = self.divide_swarm(X_dec, fitness)
         q_table_m = self.init_Q_parameter()
         
-
-        # Equivalent to MATLAB's empty arrays
         X_out = []
         fitness_out = []
 
-        # Equivalent to MATLAB's zeros
-        failure_times_m = np.zeros((self.Nm, 1))  # Assuming Nm is defined
-        failure_times_f = np.zeros((self.Nf, 1))  # Assuming Nf is defined
+        failure_times_m = np.zeros(Xm.popSize)  # Assuming Nm is defined
+        failure_times_f = np.zeros(Xf.popSize)  # Assuming Nf is defined
 
         maxFailure_times = 10
 
@@ -420,18 +420,19 @@ class RLMSO:
             Q_val = C1[t - 1] * np.exp((t - T) / T)  # eq.(5)
 
             # 找到超过最大失败次数的个体
-            indices = np.where(failure_times_m >= maxFailure_times)[0]
-            indices1 = np.where(failure_times_f >= maxFailure_times)[0]
-
+            indices = np.where(failure_times_m >= maxFailure_times)[0].ravel()
+            indices1 = np.where(failure_times_f >= maxFailure_times)[0].ravel()
             if len(indices) > 0 or len(indices1) > 0:
                 if len(indices) > 0:
-                    X_out = np.vstack([X_out, Xm[indices, :]]) if len(X_out) > 0 else Xm[indices, :]
-                    fitness_out = np.hstack([fitness_out, fitness_m[indices]]) if len(fitness_out) > 0 else fitness_m[indices]
+                    
+                    X_out = np.vstack([X_out, Xm.decs[indices, :]]) if len(X_out) > 0 else Xm.decs[indices, :]
+                    fitness_out = np.hstack([fitness_out, Xm.objs[indices]]) if len(fitness_out) > 0 else Xm.objs[indices]
 
                 if len(indices1) > 0:
-                    X_out = np.vstack([X_out, Xf[indices1, :]]) if len(X_out) > 0 else Xf[indices1, :]
-                    fitness_out = np.hstack([fitness_out, fitness_f[indices1]]) if len(fitness_out) > 0 else fitness_f[indices1]
-
+                    X_out = np.vstack([X_out, Xf.decs[indices1, :]]) if len(X_out) > 0 else Xf.decs[indices1, :]
+                    fitness_out = np.hstack([fitness_out, Xf.objs[indices1]]) if len(fitness_out) > 0 else Xf.objs[indices1]
+                a = Xm.decs[indices, :]
+                b = Xm.decs[indices1, :]
                 sortedIndex = np.argsort(fitness_out)
                 X_out = X_out[sortedIndex, :]
                 fitness_out = fitness_out[sortedIndex]
@@ -448,8 +449,8 @@ class RLMSO:
                 p = round(0.05 * len(fitness_out))
                 p = max(p, 1)  # 确保 p 至少为 1
 
-                xall = np.vstack([X_out, Xm, Xf])
-                fitnesspbest = np.hstack([fitness_out, fitness_m, fitness_f])
+                xall = np.vstack([X_out, Xm.decs, Xf.decs])
+                fitnesspbest = np.hstack([fitness_out, Xm.objs, Xf.objs])
 
                 pIndex = np.argsort(fitnesspbest)
                 xpbest = xall[pIndex[:p], :]
@@ -463,8 +464,8 @@ class RLMSO:
                     # 边界检查
                     tempXm = np.clip(tempXm, lb, ub)
                     y = fobj(tempXm)
-                    fitness_m[indices[i]] = y
-                    Xm[indices[i], :] = tempXm
+                    Xm.objs[indices[i]] = y
+                    Xm.decs[indices[i], :] = tempXm
 
                 for i in range(len(indices1)):
                     r = np.random.choice(xall.shape[0], 2, replace=False)
@@ -475,63 +476,59 @@ class RLMSO:
                     # 边界检查
                     tempXf = np.clip(tempXf, lb, ub)
                     y = fobj(tempXf)
-                    fitness_f[indices1[i]] = y
-                    Xf[indices1[i], :] = tempXf
+                    Xf.objs[indices1[i]] = y
+                    Xf.decs[indices1[i], :] = tempXf
 
             # 获取 Q-learning 状态和行动
-            state_m = self.get_state_knn(Xm, fitness_m, round(N/10))
+            state_m = self.get_state_knn(Xm.decs,Xm.objs, round(N/10))
             action_m = self.get_action(q_table_m, state_m)
-            newXm_dec = np.zeros_like(Xm)
-
-            # 排序并更新
-            index = np.argsort(fitness_m)
-            index1 = np.argsort(fitness_f)
-
-            for i in range(Xm.shape[0]):
+            newXm_dec = np.zeros_like(Xm.decs)
+            
+            for i in range(Xm.decs.shape[0]):
                 if action_m[i] == 1:
-                    newXm_dec[i, :] = self.ind_exploration_NoFood(Xm, fitness_m[i], Xm,fitness_m, C2[t - 1], lb, ub)
+                    newXm_dec[i, :] = self.ind_exploration_NoFood(Xm.decs[i],Xm.objs[i],Xm.decs,Xm.objs, C2[t - 1], lb, ub)
                 elif action_m[i] == 2:
-                    newXm_dec[i, :] = self.exploit_Food(Xm[i, :].reshape(1, -1), Xfood, Temp, C3[t - 1])
+                    newXm_dec[i, :] = self.exploit_Food(Xm.decs[i].reshape(1, -1), Xfood.dec, Temp, C3[t - 1])
                 elif action_m[i] == 3:
-                    newXm_dec[i, :] = self.so_fight(Xm[i, :].reshape(1, -1), fitness_m[i].reshape(1, ), Xbest_f, fitnessBest_f, t1[t - 1], C3[t - 1], Q_val)
+                    newXm_dec[i, :] = self.so_fight(Xm.decs[i].reshape(1, -1), Xm.objs[i].reshape(1, ), Xf.bestInd.dec, Xf.bestInd.obj, t1[t - 1], C3[t - 1], Q_val)
                 else:
-                    newXm_dec[i, :], _ = self.so_mating(Xm[i, :].reshape(1, -1), Xf[i, :].reshape(1, -1), fitness_m[i].reshape(1, ), fitness_f[i].reshape(1, ), C3[t - 1], Q_val, lb, ub)
+                    newXm_dec[i, :], _ = self.so_mating(Xm.decs[i].reshape(1, -1), Xf.decs[i].reshape(1, -1), Xm.objs[i].reshape(1, ), Xf.objs[i].reshape(1, ), C3[t - 1], Q_val, lb, ub)
 
             # 更新 Xf 解
             if Q_val < Threshold:
-                newXf_dec = self.exploration_NoFood(Xf, fitness_f, C2[t - 1], lb, ub)
+                newXf_dec = self.exploration_NoFood(Xf.decs, Xf.objs, C2[t - 1], lb, ub)
             else:
                 if Temp > Threshold2:
-                    newXf_dec = self.exploit_Food(Xf, Xfood, Temp, C3[ t - 1])
+                    newXf_dec = self.exploit_Food(Xf.decs, Xfood.dec, Temp, C3[ t - 1])
                 else:
                     if np.random.rand() > 0.6:
-                        newXf_dec = self.so_fight(Xf, fitness_f, Xbest_m, fitnessBest_m, t1[ t - 1], C3[ t - 1], Q_val)
+                        newXf_dec = self.so_fight(Xf.decs,Xf.objs, Xm.bestInd.dec, Xm.bestInd.obj, t1[ t - 1], C3[ t - 1], Q_val)
                     else:
-                        _, newXf_dec = self.so_mating(Xm, Xf, fitness_m, fitness_f, C3[ t - 1], Q_val, lb, ub)
+                        _, newXf_dec = self.so_mating(Xm.decs, Xf.decs,Xm.objs, Xf.objs, C3[ t - 1], Q_val, lb, ub)
 
             # 随机替换最差的解
-            for i in range(round(Xf.shape[0] / 10)):
+            index = np.argsort(Xm.objs)
+            index1 = np.argsort(Xf.objs)
+            for i in range(round(Xf.decs.shape[0] / 10)):
                 newXm_dec[index[-(i + 1)], :] = lb + np.random.rand() * (ub - lb)
                 newXf_dec[index1[-(i + 1)], :] = lb + np.random.rand() * (ub - lb)
 
             # 评估解并更新
-            Xm, fitness_m, reward_m, failure_times_m = self.evaluation_reward(Xm, newXm_dec, fitness_m, lb, ub, fobj, failure_times_m)
-            Xf, fitness_f, _, failure_times_f = self.evaluation_reward(Xf, newXf_dec, fitness_f, lb, ub, fobj, failure_times_f)
+            Xm,  reward_m, failure_times_m = self.evaluation_reward(Xm, newXm_dec, lb, ub, fobj, failure_times_m)
+            Xf,  _, failure_times_f = self.evaluation_reward(Xf, newXf_dec,  lb, ub, fobj, failure_times_f)
 
             # 获取下一步的状态
-            next_state_m = self.get_state_knn(Xm, fitness_m, round(N/10))
+            next_state_m = self.get_state_knn(Xm.decs, Xm.objs, round(N/10))
 
             # 更新 Q 表
-            for i in range(Xm.shape[0]):
+            for i in range(Xm.decs.shape[0]):
                 q_table_m = self.update_q_table(state_m[i, :], action_m[i], reward_m[i], next_state_m[i, :], q_table_m)
-
-            # 更新全局最优解
-            Xbest_m, Xbest_f, fitnessBest_m, fitnessBest_f, GYbest, Xfood = self.updateXbest(Xm, Xf, fitness_m, fitness_f, Xbest_m, Xbest_f, fitnessBest_m, fitnessBest_f)
+            Xfood = Xm.bestInd if Xm.bestInd.obj < Xf.bestInd.obj else Xf.bestInd
 
             # 记录全局最优适应度
-            gbest_t[ t] = GYbest
-            print("Iter:{t} Best:{GYbest}",t,GYbest)
-        fval = GYbest
+            gbest_t[ t] = Xfood.obj
+            print("Iter:{t} Best:{GYbest}",t,Xfood.obj)
+        fval = Xfood.obj
         return Xfood,fval,gbest_t
 
 
