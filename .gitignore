@@ -2,3 +2,8 @@
 .idea/vcs.xml
 __pycache__/RLMSO2.cpython-311.pyc
 __pycache__/RLMSO.cpython-311.pyc
+.idea/misc.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.vscode/settings.json
+.idea/.gitignore
+.gitignore

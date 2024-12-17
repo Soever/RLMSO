@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from RLMSO2 import Population, Individual
+from RLMSO2 import Population, Individual,RLMSO
 
 class TestPopulation(unittest.TestCase):
     def setUp(self):
@@ -33,6 +33,14 @@ class TestPopulation(unittest.TestCase):
     #     self.assertTrue(np.array_equal(self.pop.objs, np.array([0.75, 0.8, 0.9])))
     #     self.assertTrue(np.array_equal(self.pop.csts, np.array([[0.1, 0.2], [0.3, 0.4], [0.5, 0.6]])))
     #     self.assertTrue(np.array_equal(self.pop.feasible, [True, True, True]))
-
+import random
 if __name__ == '__main__':
-    unittest.main()
+
+    matrix = np.random.normal(loc=0, scale=5, size=(3, 2))
+
+    # 将所有值裁剪到[-10, 10]范围内
+    matrix = np.clip(matrix, -10, 10)
+    rlmso = RLMSO()
+    matrix_binary = rlmso.binary(matrix)
+    print(matrix)
+    print(matrix_binary)

@@ -82,6 +82,7 @@ class RLMSO:
         self.C3=C3
         self.Nm =None
         self.Nf =None
+        self.FeatureNum = None
     def divide_swarm(self, X, fitness):
         self.Nm = round(len(X) / 2)  # eq.(2&3)
         self.Nf = len(X) - self.Nm

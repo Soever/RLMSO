@@ -19,15 +19,14 @@ if __name__ == '__main__':
     # 提取目标值 (最后一列)
     y = df.iloc[:, -1].to_numpy()
     def f(x):
-        X_binary = rlmso.binary(x)
-        print(X_binary)
-        if X_binary.sum() == 0:
+        
+        if x.sum() == 0:
             return 1
         
-        X_selected = X[:, X_binary == 1]
-        X_train, X_test, y_train, y_test = train_test_split(X_selected, y, test_size=0.3, random_state=42)
-        # 初始化支持向量机模型 (使用线性核)
-        svm_model = SVC(kernel='linear')
+        X_selected = X[:, x == 1]
+        X_train, X_test, y_train, y_test = train_test_split(X_selected.copy(), y, test_size=0.3, random_state=42)
+        # 初始化支持向量机模型 
+        svm_model = SVC(kernel='rbf')
         # 训练模型
         svm_model.fit(X_train, y_train)
         # 对测试集进行预测
@@ -37,6 +36,10 @@ if __name__ == '__main__':
         return 1-accuracy
     # def fobj(x):
     #     return x[0]**2+x[1]**2
-    # f =  fobj
-    Xfood,fval,gbest_t = rlmso.optimize(10,20,-10,10,11,f)
+    # f =  fobj\
+    dim =11 
+    Xfood,fval,gbest_t = rlmso.optimize(100,100,-100,100,11,f)
+    print(Xfood.dec2)
+    print(Xfood.dec)
+    print(fval)
 
